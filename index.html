@@ -126,21 +126,21 @@ function periodCard(key, list){
 
 function render(data){
   const rows = data.rows||[];
-  // 直近1ヶ月分だけに絞る（常時表示・タブ分けなし）
-  const asOf = data.asOf ? new Date(data.asOf+"T00:00:00") : new Date();
-  const oneMonthAgo = new Date(asOf); oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);
-  const recent = rows.filter(r=> new Date(r.date+"T00:00:00") >= oneMonthAgo);
-
-  // 締め期間ごとにグルーピング（見出しの請求前/請求済タグは参考表示として残す）
+  // 締め期間ごとにグルーピング（全期間、まず丸ごと）。見出しの請求前/請求済タグは参考表示として残す
   const groups = {};
   const order = [];
-  recent.forEach(r=>{
+  rows.forEach(r=>{
     const key = periodEndFor(r.date);
     if(!groups[key]){ groups[key]=[]; order.push(key); }
     groups[key].push(r);
   });
   order.sort(); // 昇順（古い→新しい）
-  const rev = order.slice().reverse();
+
+  // 直近1ヶ月に1件でもデータがある「期間」は、その期間を丸ごと表示（部分表示で合計がズレるのを防ぐ）
+  const asOf = data.asOf ? new Date(data.asOf+"T00:00:00") : new Date();
+  const oneMonthAgo = new Date(asOf); oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);
+  const recentOrder = order.filter(key=> groups[key].some(r=> new Date(r.date+"T00:00:00") >= oneMonthAgo));
+  const rev = recentOrder.slice().reverse();
 
   if(!rev.length){
     $("#periods").innerHTML = `<div class="card"><div class="empty">直近1ヶ月の配送実績データがありません。</div></div>`;
