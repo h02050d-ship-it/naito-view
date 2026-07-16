@@ -25,11 +25,15 @@
   #login-err{color:#c0392b;font-size:12px;min-height:16px;margin-top:2px}
   /* メイン */
   #main-view{display:none}
-  .hero{background:linear-gradient(135deg,var(--v),var(--v-d));color:#fff}
-  .hero .label{font-size:12px;opacity:.9}
-  .hero .num{font-size:34px;font-weight:bold;margin:4px 0}
-  .hero .note{font-size:12px;opacity:.85;line-height:1.6}
+  .tabs{display:flex;gap:8px;margin-bottom:14px}
+  .tab-btn{flex:1;padding:11px 8px;border:1.5px solid var(--v);border-radius:10px;background:#fff;color:var(--v);font-size:14px;font-weight:bold;cursor:pointer}
+  .tab-btn .cnt{display:inline-block;margin-left:4px;font-size:11px;background:var(--v);color:#fff;border-radius:9px;padding:1px 7px}
+  .tab-btn.on{background:var(--v);color:#fff}
+  .tab-btn.on .cnt{background:#fff;color:var(--v)}
+  .tab-panel{display:none}
+  .tab-panel.on{display:block}
   .period{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+  .period:first-child{border-top:none;padding-top:0;margin-top:0}
   .period h3{font-size:13px;margin:0 0 8px;color:var(--sub);display:flex;justify-content:space-between;align-items:center}
   .period h3 .tag{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:bold}
   .tag.unbilled{background:#fff3e0;color:#e65100}
@@ -63,14 +67,15 @@
     <div class="sub">株式会社 林材木店 → 有限会社内藤運輸様</div>
   </header>
   <div class="wrap">
-    <div class="card hero">
-      <div class="label">現在ご確認いただける分（次回請求予定・未送信）</div>
-      <div class="num" id="unbilled-total">–</div>
-      <div class="note" id="unbilled-note">読み込み中…</div>
+    <div class="tabs">
+      <button class="tab-btn on" id="tab-unbilled" data-tab="unbilled">請求前<span class="cnt" id="cnt-unbilled">0</span></button>
+      <button class="tab-btn" id="tab-billed" data-tab="billed">請求済<span class="cnt" id="cnt-billed">0</span></button>
     </div>
-    <div id="periods"></div>
+    <div id="panel-unbilled" class="tab-panel on"></div>
+    <div id="panel-billed" class="tab-panel"></div>
     <div class="footer-note">
       データは納品書データベースと連動し、最新の状況が自動で反映されます。<br>
+      林材木店が請求分を送信すると、自動的に「請求済」へ移ります。<br>
       ご不明点があれば林材木店までお問い合わせください。
     </div>
   </div>
@@ -116,9 +121,25 @@ async function loadData(pass){
   return r.json();
 }
 
+function periodCard(key, list){
+  const anyUnbilled = list.some(r=>!r.billed);
+  const total = list.reduce((s,r)=>s+Number(r.soku||0),0);
+  let html = `<div class="card period">
+    <h3>${periodLabel(key)}
+      <span class="tag ${anyUnbilled?'unbilled':'billed'}">${anyUnbilled?'請求前':'請求済'}</span>
+    </h3>
+    <table><thead><tr><th>日付</th><th>着地</th><th>長さ</th><th style="text-align:right">束数</th></tr></thead><tbody>`;
+  list.forEach(r=>{
+    const md = r.date.slice(5).replace("-","/");
+    html += `<tr><td>${md}</td><td>${esc(r.dest)}</td><td>${esc(r.len)}</td><td class="num">${fmt(r.soku)}</td></tr>`;
+  });
+  html += `</tbody><tfoot><tr class="tfoot"><td colspan="3">合計</td><td class="num">${fmt(total)} 束</td></tr></tfoot></table></div>`;
+  return html;
+}
+
 function render(data){
   const rows = data.rows||[];
-  // 締め期間ごとにグルーピング
+  // 締め期間ごとにグルーピング（期間内に1件でも未送信があれば「請求前」、全件送信済みなら「請求済」）
   const groups = {};
   const order = [];
   rows.forEach(r=>{
@@ -127,50 +148,48 @@ function render(data){
     groups[key].push(r);
   });
   order.sort(); // 昇順（古い→新しい）
-
-  // 未送信合計（billed=falseの行の合計）
-  const unbilled = rows.filter(r=>!r.billed);
-  const unbilledTotal = unbilled.reduce((s,r)=>s+Number(r.soku||0),0);
-  $("#unbilled-total").textContent = unbilledTotal>0 ? (fmt(unbilledTotal)+" 束") : "0 束";
-  $("#unbilled-note").textContent = unbilledTotal>0
-    ? "この分は次回のご請求時にFAXでもお送りします。事前確認にご利用ください。"
-    : "現在、未送信の新しい配送実績はありません。";
-
-  // 表示は新しい期間から（最新3期間まで、あとは折りたたみなしでシンプルに）
   const rev = order.slice().reverse();
-  let html = "";
-  rev.forEach((key, idx)=>{
-    const list = groups[key].slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:(a.dest<b.dest?-1:1)));
-    const anyUnbilled = list.some(r=>!r.billed);
-    const total = list.reduce((s,r)=>s+Number(r.soku||0),0);
-    if(idx>=6) return; // 直近6期間まで表示
-    html += `<div class="card period">
-      <h3>${periodLabel(key)}
-        <span class="tag ${anyUnbilled?'unbilled':'billed'}">${anyUnbilled?'未送信':'送信済み'}</span>
-      </h3>
-      <table><thead><tr><th>日付</th><th>着地</th><th>長さ</th><th style="text-align:right">束数</th></tr></thead><tbody>`;
-    list.forEach(r=>{
-      const md = r.date.slice(5).replace("-","/");
-      html += `<tr><td>${md}</td><td>${esc(r.dest)}</td><td>${esc(r.len)}</td><td class="num">${fmt(r.soku)}</td></tr>`;
-    });
-    html += `</tbody><tfoot><tr class="tfoot"><td colspan="3">合計</td><td class="num">${fmt(total)} 束</td></tr></tfoot></table>
-    </div>`;
+
+  const unbilledKeys=[], billedKeys=[];
+  rev.forEach(key=>{
+    const list = groups[key];
+    (list.some(r=>!r.billed) ? unbilledKeys : billedKeys).push(key);
   });
-  if(!rev.length) html = `<div class="card"><div class="empty">配送実績データがありません</div></div>`;
-  $("#periods").innerHTML = html;
+
+  $("#cnt-unbilled").textContent = unbilledKeys.length;
+  $("#cnt-billed").textContent = billedKeys.length;
+
+  const buildList = (keys, emptyMsg, limit)=>{
+    if(!keys.length) return `<div class="card"><div class="empty">${emptyMsg}</div></div>`;
+    return keys.slice(0, limit).map(key=>{
+      const list = groups[key].slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:(a.dest<b.dest?-1:1)));
+      return periodCard(key, list);
+    }).join("");
+  };
+  $("#panel-unbilled").innerHTML = buildList(unbilledKeys, "現在、請求前の配送実績はありません。", 12);
+  $("#panel-billed").innerHTML = buildList(billedKeys, "請求済みの配送実績はまだありません。", 6);
 }
+
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("on"));
+    document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("on"));
+    btn.classList.add("on");
+    $("#panel-"+btn.dataset.tab).classList.add("on");
+  });
+});
 
 async function boot(pass){
   $("#login-view").style.display="none";
   $("#main-view").style.display="block";
-  $("#periods").innerHTML = `<div class="loading">読み込み中…</div>`;
+  $("#panel-unbilled").innerHTML = `<div class="loading">読み込み中…</div>`;
   try{
     const data = await loadData(pass);
     if(!data || !data.ok){ throw new Error(data&&data.error||"読み込みエラー"); }
     render(data);
     $("#refresh").style.display="block";
   }catch(e){
-    $("#periods").innerHTML = `<div class="card"><div class="empty">データの取得に失敗しました。時間をおいて更新をお試しください。</div></div>`;
+    $("#panel-unbilled").innerHTML = `<div class="card"><div class="empty">データの取得に失敗しました。時間をおいて更新をお試しください。</div></div>`;
   }
 }
 
