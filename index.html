@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>配送実績ビューア｜株式会社 林材木店</title>
+<meta name="apple-mobile-web-app-title" content="配送実績">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236a1b9a'/><text x='51' y='46.5' font-size='68' text-anchor='middle' dominant-baseline='central' fill='%23ffffff' font-family='sans-serif' font-weight='bold'>内</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236a1b9a'/><text x='51' y='46.5' font-size='68' text-anchor='middle' dominant-baseline='central' fill='%23ffffff' font-family='sans-serif' font-weight='bold'>内</text></svg>">
+<style>
+  :root{ --v:#6a1b9a; --v-d:#4a1272; --bg:#f5f3f8; --card:#fff; --ink:#222; --sub:#777; --line:#e6e1ee; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Hiragino Sans","Yu Gothic",-apple-system,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:40px}
+  header{background:var(--v);color:#fff;padding:16px 18px;position:sticky;top:0;z-index:5;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  header h1{font-size:17px;margin:0}
+  header .sub{font-size:12px;opacity:.85;margin-top:2px}
+  .wrap{max-width:640px;margin:0 auto;padding:14px}
+  .card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  /* ログイン */
+  #login-view{display:flex;align-items:center;justify-content:center;min-height:70vh}
+  #login-view .card{width:100%;max-width:340px;text-align:center}
+  #login-view input{width:100%;padding:12px;font-size:16px;border:1px solid #ccc;border-radius:8px;margin:12px 0;text-align:center;letter-spacing:1px}
+  #login-view button{width:100%;padding:12px;font-size:15px;font-weight:bold;background:var(--v);color:#fff;border:none;border-radius:8px;cursor:pointer}
+  #login-view button:active{background:var(--v-d)}
+  #login-err{color:#c0392b;font-size:12px;min-height:16px;margin-top:2px}
+  /* メイン */
+  #main-view{display:none}
+  .hero{background:linear-gradient(135deg,var(--v),var(--v-d));color:#fff}
+  .hero .label{font-size:12px;opacity:.9}
+  .hero .num{font-size:34px;font-weight:bold;margin:4px 0}
+  .hero .note{font-size:12px;opacity:.85;line-height:1.6}
+  .period{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+  .period h3{font-size:13px;margin:0 0 8px;color:var(--sub);display:flex;justify-content:space-between;align-items:center}
+  .period h3 .tag{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:bold}
+  .tag.unbilled{background:#fff3e0;color:#e65100}
+  .tag.billed{background:#eee;color:#888}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:6px 4px;text-align:left;border-bottom:1px solid var(--line)}
+  th{color:var(--sub);font-weight:normal;font-size:11px}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tfoot td{font-weight:bold;border-top:2px solid var(--line);border-bottom:none}
+  .empty{color:var(--sub);font-size:13px;text-align:center;padding:20px 0}
+  #refresh{position:fixed;right:16px;bottom:16px;background:var(--v);color:#fff;border:none;border-radius:24px;padding:12px 18px;font-size:13px;font-weight:bold;box-shadow:0 3px 10px rgba(0,0,0,.25);cursor:pointer}
+  .footer-note{color:var(--sub);font-size:11px;text-align:center;margin-top:18px;line-height:1.7}
+  .loading{text-align:center;color:var(--sub);font-size:13px;padding:30px 0}
+</style>
+</head>
+<body>
+
+<div id="login-view">
+  <div class="card">
+    <div style="font-size:15px;font-weight:bold;margin-bottom:4px">🚚 配送実績ビューア</div>
+    <div style="font-size:12px;color:#777">株式会社 林材木店</div>
+    <input id="pass-input" type="password" inputmode="text" placeholder="合言葉を入力" autocomplete="off">
+    <div id="login-err"></div>
+    <button id="login-btn">開く</button>
+  </div>
+</div>
+
+<div id="main-view">
+  <header>
+    <h1>🚚 配送実績ビューア</h1>
+    <div class="sub">株式会社 林材木店 → 有限会社内藤運輸様</div>
+  </header>
+  <div class="wrap">
+    <div class="card hero">
+      <div class="label">現在ご確認いただける分（次回請求予定・未送信）</div>
+      <div class="num" id="unbilled-total">–</div>
+      <div class="note" id="unbilled-note">読み込み中…</div>
+    </div>
+    <div id="periods"></div>
+    <div class="footer-note">
+      データは納品書データベースと連動し、最新の状況が自動で反映されます。<br>
+      ご不明点があれば林材木店までお問い合わせください。
+    </div>
+  </div>
+</div>
+
+<button id="refresh" style="display:none">🔄 更新</button>
+
+<script>
+const API = "https://script.google.com/macros/s/AKfycbzhXuvNail1jrMnOzUpZP8TLqy0kXbwtLfkv5_7GXvLuomIngMCziYbOHANHiztv1sZMg/exec";
+const LS_KEY = "naito_view_pass";
+
+function $(s){ return document.querySelector(s); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fmt(n){ return Number(n||0).toLocaleString("ja-JP"); }
+
+// ----- 締め期間バケット（5日締め／20日締め、CONFIG.SCHEDULE_DAYSと対応） -----
+// 各行の日付から「どの締め期間に属するか」を判定し、期間キー(終了日)でグルーピングする。
+function periodEndFor(dateStr){
+  const d = new Date(dateStr+"T00:00:00");
+  const day = d.getDate();
+  let end;
+  if(day <= 5){ end = new Date(d.getFullYear(), d.getMonth(), 5); }
+  else if(day <= 20){ end = new Date(d.getFullYear(), d.getMonth(), 20); }
+  else { end = new Date(d.getFullYear(), d.getMonth()+1, 5); }
+  const z = n=>String(n).padStart(2,"0");
+  return `${end.getFullYear()}-${z(end.getMonth()+1)}-${z(end.getDate())}`;
+}
+function periodLabel(endKey){
+  const [y,m,d] = endKey.split("-").map(Number);
+  const end = new Date(y,m-1,d);
+  const start = new Date(end); start.setDate(start.getDate()-15); // 概算表示用（見出しのみ、集計はperiodEndForで正確）
+  const jm = dt=> `${dt.getMonth()+1}/${dt.getDate()}`;
+  return `〜${y}年${m}月${d}日締め`;
+}
+
+async function doLogin(pass){
+  const r = await fetch(API+"?action=login&pass="+encodeURIComponent(pass));
+  const j = await r.json();
+  return !!(j && j.ok);
+}
+async function loadData(pass){
+  const r = await fetch(API+"?action=view&pass="+encodeURIComponent(pass));
+  return r.json();
+}
+
+function render(data){
+  const rows = data.rows||[];
+  // 締め期間ごとにグルーピング
+  const groups = {};
+  const order = [];
+  rows.forEach(r=>{
+    const key = periodEndFor(r.date);
+    if(!groups[key]){ groups[key]=[]; order.push(key); }
+    groups[key].push(r);
+  });
+  order.sort(); // 昇順（古い→新しい）
+
+  // 未送信合計（billed=falseの行の合計）
+  const unbilled = rows.filter(r=>!r.billed);
+  const unbilledTotal = unbilled.reduce((s,r)=>s+Number(r.soku||0),0);
+  $("#unbilled-total").textContent = unbilledTotal>0 ? (fmt(unbilledTotal)+" 束") : "0 束";
+  $("#unbilled-note").textContent = unbilledTotal>0
+    ? "この分は次回のご請求時にFAXでもお送りします。事前確認にご利用ください。"
+    : "現在、未送信の新しい配送実績はありません。";
+
+  // 表示は新しい期間から（最新3期間まで、あとは折りたたみなしでシンプルに）
+  const rev = order.slice().reverse();
+  let html = "";
+  rev.forEach((key, idx)=>{
+    const list = groups[key].slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:(a.dest<b.dest?-1:1)));
+    const anyUnbilled = list.some(r=>!r.billed);
+    const total = list.reduce((s,r)=>s+Number(r.soku||0),0);
+    if(idx>=6) return; // 直近6期間まで表示
+    html += `<div class="card period">
+      <h3>${periodLabel(key)}
+        <span class="tag ${anyUnbilled?'unbilled':'billed'}">${anyUnbilled?'未送信':'送信済み'}</span>
+      </h3>
+      <table><thead><tr><th>日付</th><th>着地</th><th>長さ</th><th style="text-align:right">束数</th></tr></thead><tbody>`;
+    list.forEach(r=>{
+      const md = r.date.slice(5).replace("-","/");
+      html += `<tr><td>${md}</td><td>${esc(r.dest)}</td><td>${esc(r.len)}</td><td class="num">${fmt(r.soku)}</td></tr>`;
+    });
+    html += `</tbody><tfoot><tr class="tfoot"><td colspan="3">合計</td><td class="num">${fmt(total)} 束</td></tr></tfoot></table>
+    </div>`;
+  });
+  if(!rev.length) html = `<div class="card"><div class="empty">配送実績データがありません</div></div>`;
+  $("#periods").innerHTML = html;
+}
+
+async function boot(pass){
+  $("#login-view").style.display="none";
+  $("#main-view").style.display="block";
+  $("#periods").innerHTML = `<div class="loading">読み込み中…</div>`;
+  try{
+    const data = await loadData(pass);
+    if(!data || !data.ok){ throw new Error(data&&data.error||"読み込みエラー"); }
+    render(data);
+    $("#refresh").style.display="block";
+  }catch(e){
+    $("#periods").innerHTML = `<div class="card"><div class="empty">データの取得に失敗しました。時間をおいて更新をお試しください。</div></div>`;
+  }
+}
+
+$("#login-btn").addEventListener("click", async ()=>{
+  const pass = $("#pass-input").value.trim();
+  if(!pass){ return; }
+  $("#login-btn").disabled=true; $("#login-btn").textContent="確認中…";
+  const ok = await doLogin(pass).catch(()=>false);
+  $("#login-btn").disabled=false; $("#login-btn").textContent="開く";
+  if(ok){ localStorage.setItem(LS_KEY, pass); boot(pass); }
+  else { $("#login-err").textContent = "合言葉が違います"; }
+});
+$("#pass-input").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#login-btn").click(); });
+$("#refresh").addEventListener("click", ()=>{ const p=localStorage.getItem(LS_KEY); if(p) boot(p); });
+
+(async function init(){
+  const saved = localStorage.getItem(LS_KEY);
+  if(saved){
+    const ok = await doLogin(saved).catch(()=>false);
+    if(ok){ boot(saved); return; }
+    localStorage.removeItem(LS_KEY);
+  }
+})();
+</script>
+</body>
+</html>
