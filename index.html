@@ -25,13 +25,6 @@
   #login-err{color:#c0392b;font-size:12px;min-height:16px;margin-top:2px}
   /* メイン */
   #main-view{display:none}
-  .tabs{display:flex;gap:8px;margin-bottom:14px}
-  .tab-btn{flex:1;padding:11px 8px;border:1.5px solid var(--v);border-radius:10px;background:#fff;color:var(--v);font-size:14px;font-weight:bold;cursor:pointer}
-  .tab-btn .cnt{display:inline-block;margin-left:4px;font-size:11px;background:var(--v);color:#fff;border-radius:9px;padding:1px 7px}
-  .tab-btn.on{background:var(--v);color:#fff}
-  .tab-btn.on .cnt{background:#fff;color:var(--v)}
-  .tab-panel{display:none}
-  .tab-panel.on{display:block}
   .period{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
   .period:first-child{border-top:none;padding-top:0;margin-top:0}
   .period h3{font-size:13px;margin:0 0 8px;color:var(--sub);display:flex;justify-content:space-between;align-items:center}
@@ -67,15 +60,9 @@
     <div class="sub">株式会社 林材木店 → 有限会社内藤運輸様</div>
   </header>
   <div class="wrap">
-    <div class="tabs">
-      <button class="tab-btn on" id="tab-unbilled" data-tab="unbilled">請求前<span class="cnt" id="cnt-unbilled">0</span></button>
-      <button class="tab-btn" id="tab-billed" data-tab="billed">請求済<span class="cnt" id="cnt-billed">0</span></button>
-    </div>
-    <div id="panel-unbilled" class="tab-panel on"></div>
-    <div id="panel-billed" class="tab-panel"></div>
+    <div id="periods"></div>
     <div class="footer-note">
-      データは納品書データベースと連動し、最新の状況が自動で反映されます。<br>
-      林材木店が請求分を送信すると、自動的に「請求済」へ移ります。<br>
+      直近1ヶ月分の配送実績を表示しています。データは納品書データベースと連動し、最新の状況が自動で反映されます。<br>
       ご不明点があれば林材木店までお問い合わせください。
     </div>
   </div>
@@ -139,10 +126,15 @@ function periodCard(key, list){
 
 function render(data){
   const rows = data.rows||[];
-  // 締め期間ごとにグルーピング（期間内に1件でも未送信があれば「請求前」、全件送信済みなら「請求済」）
+  // 直近1ヶ月分だけに絞る（常時表示・タブ分けなし）
+  const asOf = data.asOf ? new Date(data.asOf+"T00:00:00") : new Date();
+  const oneMonthAgo = new Date(asOf); oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);
+  const recent = rows.filter(r=> new Date(r.date+"T00:00:00") >= oneMonthAgo);
+
+  // 締め期間ごとにグルーピング（見出しの請求前/請求済タグは参考表示として残す）
   const groups = {};
   const order = [];
-  rows.forEach(r=>{
+  recent.forEach(r=>{
     const key = periodEndFor(r.date);
     if(!groups[key]){ groups[key]=[]; order.push(key); }
     groups[key].push(r);
@@ -150,46 +142,27 @@ function render(data){
   order.sort(); // 昇順（古い→新しい）
   const rev = order.slice().reverse();
 
-  const unbilledKeys=[], billedKeys=[];
-  rev.forEach(key=>{
-    const list = groups[key];
-    (list.some(r=>!r.billed) ? unbilledKeys : billedKeys).push(key);
-  });
-
-  $("#cnt-unbilled").textContent = unbilledKeys.length;
-  $("#cnt-billed").textContent = billedKeys.length;
-
-  const buildList = (keys, emptyMsg, limit)=>{
-    if(!keys.length) return `<div class="card"><div class="empty">${emptyMsg}</div></div>`;
-    return keys.slice(0, limit).map(key=>{
-      const list = groups[key].slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:(a.dest<b.dest?-1:1)));
-      return periodCard(key, list);
-    }).join("");
-  };
-  $("#panel-unbilled").innerHTML = buildList(unbilledKeys, "現在、請求前の配送実績はありません。", 12);
-  $("#panel-billed").innerHTML = buildList(billedKeys, "請求済みの配送実績はまだありません。", 6);
+  if(!rev.length){
+    $("#periods").innerHTML = `<div class="card"><div class="empty">直近1ヶ月の配送実績データがありません。</div></div>`;
+    return;
+  }
+  $("#periods").innerHTML = rev.map(key=>{
+    const list = groups[key].slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:(a.dest<b.dest?-1:1)));
+    return periodCard(key, list);
+  }).join("");
 }
-
-document.querySelectorAll(".tab-btn").forEach(btn=>{
-  btn.addEventListener("click", ()=>{
-    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("on"));
-    document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("on"));
-    btn.classList.add("on");
-    $("#panel-"+btn.dataset.tab).classList.add("on");
-  });
-});
 
 async function boot(pass){
   $("#login-view").style.display="none";
   $("#main-view").style.display="block";
-  $("#panel-unbilled").innerHTML = `<div class="loading">読み込み中…</div>`;
+  $("#periods").innerHTML = `<div class="loading">読み込み中…</div>`;
   try{
     const data = await loadData(pass);
     if(!data || !data.ok){ throw new Error(data&&data.error||"読み込みエラー"); }
     render(data);
     $("#refresh").style.display="block";
   }catch(e){
-    $("#panel-unbilled").innerHTML = `<div class="card"><div class="empty">データの取得に失敗しました。時間をおいて更新をお試しください。</div></div>`;
+    $("#periods").innerHTML = `<div class="card"><div class="empty">データの取得に失敗しました。時間をおいて更新をお試しください。</div></div>`;
   }
 }
 
