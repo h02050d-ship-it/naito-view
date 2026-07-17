@@ -25,11 +25,8 @@
   #login-err{color:#c0392b;font-size:12px;min-height:16px;margin-top:2px}
   /* メイン */
   #main-view{display:none}
-  .summary{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+  .summary{margin-bottom:2px}
   .summary .ttl{font-size:13px;color:var(--sub)}
-  .summary .tag{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:bold}
-  .tag.unbilled{background:#fff3e0;color:#e65100}
-  .tag.billed{background:#eee;color:#888}
   table{width:100%;border-collapse:collapse;font-size:13px}
   th,td{padding:6px 4px;text-align:left;border-bottom:1px solid var(--line)}
   th{color:var(--sub);font-weight:normal;font-size:11px}
@@ -98,12 +95,9 @@ function render(data){
     $("#periods").innerHTML = `<div class="card"><div class="empty">直近1ヶ月の配送実績データがありません。</div></div>`;
     return;
   }
-  const anyUnbilled = list.some(r=>!r.billed);
   const total = list.reduce((s,r)=>s+Number(r.soku||0),0);
   let html = `<div class="card">
-    <div class="summary"><span class="ttl">直近1ヶ月の配送実績</span>
-      <span class="tag ${anyUnbilled?'unbilled':'billed'}">${anyUnbilled?'請求前あり':'請求済み'}</span>
-    </div>
+    <div class="summary"><span class="ttl">直近1ヶ月の配送実績</span></div>
     <table><thead><tr><th>日付</th><th>着地</th><th>長さ</th><th style="text-align:right">束数</th></tr></thead><tbody>`;
   list.forEach(r=>{
     const md = r.date.slice(5).replace("-","/");
