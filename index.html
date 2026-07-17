@@ -25,10 +25,9 @@
   #login-err{color:#c0392b;font-size:12px;min-height:16px;margin-top:2px}
   /* メイン */
   #main-view{display:none}
-  .period{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
-  .period:first-child{border-top:none;padding-top:0;margin-top:0}
-  .period h3{font-size:13px;margin:0 0 8px;color:var(--sub);display:flex;justify-content:space-between;align-items:center}
-  .period h3 .tag{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:bold}
+  .summary{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+  .summary .ttl{font-size:13px;color:var(--sub)}
+  .summary .tag{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:bold}
   .tag.unbilled{background:#fff3e0;color:#e65100}
   .tag.billed{background:#eee;color:#888}
   table{width:100%;border-collapse:collapse;font-size:13px}
@@ -78,26 +77,6 @@ function $(s){ return document.querySelector(s); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function fmt(n){ return Number(n||0).toLocaleString("ja-JP"); }
 
-// ----- 締め期間バケット（5日締め／20日締め、CONFIG.SCHEDULE_DAYSと対応） -----
-// 各行の日付から「どの締め期間に属するか」を判定し、期間キー(終了日)でグルーピングする。
-function periodEndFor(dateStr){
-  const d = new Date(dateStr+"T00:00:00");
-  const day = d.getDate();
-  let end;
-  if(day <= 5){ end = new Date(d.getFullYear(), d.getMonth(), 5); }
-  else if(day <= 20){ end = new Date(d.getFullYear(), d.getMonth(), 20); }
-  else { end = new Date(d.getFullYear(), d.getMonth()+1, 5); }
-  const z = n=>String(n).padStart(2,"0");
-  return `${end.getFullYear()}-${z(end.getMonth()+1)}-${z(end.getDate())}`;
-}
-function periodLabel(endKey){
-  const [y,m,d] = endKey.split("-").map(Number);
-  const end = new Date(y,m-1,d);
-  const start = new Date(end); start.setDate(start.getDate()-15); // 概算表示用（見出しのみ、集計はperiodEndForで正確）
-  const jm = dt=> `${dt.getMonth()+1}/${dt.getDate()}`;
-  return `〜${y}年${m}月${d}日締め`;
-}
-
 async function doLogin(pass){
   const r = await fetch(API+"?action=login&pass="+encodeURIComponent(pass));
   const j = await r.json();
@@ -108,48 +87,30 @@ async function loadData(pass){
   return r.json();
 }
 
-function periodCard(key, list){
+function render(data){
+  const rows = data.rows||[];
+  const asOf = data.asOf ? new Date(data.asOf+"T00:00:00") : new Date();
+  const oneMonthAgo = new Date(asOf); oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);
+  const list = rows.filter(r=> new Date(r.date+"T00:00:00") >= oneMonthAgo)
+                   .sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:(a.dest<b.dest?-1:1)));
+
+  if(!list.length){
+    $("#periods").innerHTML = `<div class="card"><div class="empty">直近1ヶ月の配送実績データがありません。</div></div>`;
+    return;
+  }
   const anyUnbilled = list.some(r=>!r.billed);
   const total = list.reduce((s,r)=>s+Number(r.soku||0),0);
-  let html = `<div class="card period">
-    <h3>${periodLabel(key)}
-      <span class="tag ${anyUnbilled?'unbilled':'billed'}">${anyUnbilled?'請求前':'請求済'}</span>
-    </h3>
+  let html = `<div class="card">
+    <div class="summary"><span class="ttl">直近1ヶ月の配送実績</span>
+      <span class="tag ${anyUnbilled?'unbilled':'billed'}">${anyUnbilled?'請求前あり':'請求済み'}</span>
+    </div>
     <table><thead><tr><th>日付</th><th>着地</th><th>長さ</th><th style="text-align:right">束数</th></tr></thead><tbody>`;
   list.forEach(r=>{
     const md = r.date.slice(5).replace("-","/");
     html += `<tr><td>${md}</td><td>${esc(r.dest)}</td><td>${esc(r.len)}</td><td class="num">${fmt(r.soku)}</td></tr>`;
   });
   html += `</tbody><tfoot><tr class="tfoot"><td colspan="3">合計</td><td class="num">${fmt(total)} 束</td></tr></tfoot></table></div>`;
-  return html;
-}
-
-function render(data){
-  const rows = data.rows||[];
-  // 締め期間ごとにグルーピング（全期間、まず丸ごと）。見出しの請求前/請求済タグは参考表示として残す
-  const groups = {};
-  const order = [];
-  rows.forEach(r=>{
-    const key = periodEndFor(r.date);
-    if(!groups[key]){ groups[key]=[]; order.push(key); }
-    groups[key].push(r);
-  });
-  order.sort(); // 昇順（古い→新しい）
-
-  // 直近1ヶ月に1件でもデータがある「期間」は、その期間を丸ごと表示（部分表示で合計がズレるのを防ぐ）
-  const asOf = data.asOf ? new Date(data.asOf+"T00:00:00") : new Date();
-  const oneMonthAgo = new Date(asOf); oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);
-  const recentOrder = order.filter(key=> groups[key].some(r=> new Date(r.date+"T00:00:00") >= oneMonthAgo));
-  const rev = recentOrder.slice().reverse();
-
-  if(!rev.length){
-    $("#periods").innerHTML = `<div class="card"><div class="empty">直近1ヶ月の配送実績データがありません。</div></div>`;
-    return;
-  }
-  $("#periods").innerHTML = rev.map(key=>{
-    const list = groups[key].slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:(a.dest<b.dest?-1:1)));
-    return periodCard(key, list);
-  }).join("");
+  $("#periods").innerHTML = html;
 }
 
 async function boot(pass){
