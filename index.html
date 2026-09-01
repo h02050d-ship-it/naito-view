@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>配送実績ビューア｜株式会社 林材木店</title>
 <meta name="apple-mobile-web-app-title" content="配送実績">
+<!-- 起動高速化：GASへの接続（DNS/TLS）を先に張っておく -->
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="dns-prefetch" href="https://script.google.com">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236a1b9a'/><text x='51' y='46.5' font-size='68' text-anchor='middle' dominant-baseline='central' fill='%23ffffff' font-family='sans-serif' font-weight='bold'>内</text></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236a1b9a'/><text x='51' y='46.5' font-size='68' text-anchor='middle' dominant-baseline='central' fill='%23ffffff' font-family='sans-serif' font-weight='bold'>内</text></svg>">
 <style>
@@ -70,6 +74,15 @@
 <script>
 const API = "https://script.google.com/macros/s/AKfycbzhXuvNail1jrMnOzUpZP8TLqy0kXbwtLfkv5_7GXvLuomIngMCziYbOHANHiztv1sZMg/exec";
 const LS_KEY = "naito_view_pass";
+const CACHE_KEY = "naito_view_srv_cache_v1"; // 起動高速化：前回取得データを保存して即表示に使う
+
+function readCache(){
+  try{ const c=JSON.parse(localStorage.getItem(CACHE_KEY)||"null"); if(c&&c.data) return c.data; }catch(e){}
+  return null;
+}
+function writeCache(data){
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify({t:Date.now(),data})); }catch(e){}
+}
 
 function $(s){ return document.querySelector(s); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -115,6 +128,7 @@ async function boot(pass){
   try{
     const data = await loadData(pass);
     if(!data || !data.ok){ throw new Error(data&&data.error||"読み込みエラー"); }
+    writeCache(data); // 次回起動の即表示用に保存
     render(data);
     $("#refresh").style.display="block";
   }catch(e){
@@ -136,11 +150,31 @@ $("#refresh").addEventListener("click", ()=>{ const p=localStorage.getItem(LS_KE
 
 (async function init(){
   const saved = localStorage.getItem(LS_KEY);
-  if(saved){
-    const ok = await doLogin(saved).catch(()=>false);
-    if(ok){ boot(saved); return; }
-    localStorage.removeItem(LS_KEY);
+  if(!saved) return;
+  // 起動高速化：前回データがあれば即表示し、ログイン確認と最新取得は裏で行う
+  const cached = readCache();
+  if(cached){
+    $("#login-view").style.display="none";
+    $("#main-view").style.display="block";
+    render(cached);
+    $("#refresh").style.display="block";
+    try{
+      const data = await loadData(saved);
+      if(data && data.ok){ writeCache(data); render(data); return; }
+      // 取得NG→合言葉が無効になった場合のみログイン画面へ戻す（通信エラーは前回データのまま）
+      const ok = await doLogin(saved).catch(()=>true);
+      if(!ok){
+        localStorage.removeItem(LS_KEY);
+        $("#main-view").style.display="none"; $("#refresh").style.display="none";
+        $("#login-view").style.display="flex";
+      }
+    }catch(e){ /* オフライン等→前回データのまま */ }
+    return;
   }
+  // 前回データなし＝従来どおりログイン確認してから表示
+  const ok = await doLogin(saved).catch(()=>false);
+  if(ok){ boot(saved); return; }
+  localStorage.removeItem(LS_KEY);
 })();
 </script>
 </body>
